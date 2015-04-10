@@ -1,0 +1,322 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Example of the Authorization Code flow with Spotify</title>
+    <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+    <style type="text/css">
+      #login, #loggedin {
+        display: none;
+      }
+      .text-overflow {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 500px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div id="login">
+        <h1>This is an example of the Authorization Code flow</h1>
+        <a href="/login" class="btn btn-primary">Log in with Spotify</a>
+      </div>
+      <div id="loggedin">
+        <div id="user-profile">
+        </div>
+        <div id="playlist-form">
+            <h3>Add artist names to create a playlist with their top tracks</h3>
+            <input type="text" id="playlist-name" placeholder="Title of Playlist to Create" style="width:250px">
+            <button class="btn btn-default" id="create-playlist">Create Playlist</button><br>
+            <textarea id="artist-entry"rows="6" cols="50" placeholder="Enter a comma separated list to add artists to your playlist"></textarea><br>
+            <button class="btn btn-default" id="get-artist-id">Add Artists</button>
+        </div>
+        <div id="oauth">
+        </div>
+        <button class="btn btn-default" id="obtain-new-token">Obtain new token using the refresh token</button>
+      </div>
+    </div>
+
+    <script id="user-profile-template" type="text/x-handlebars-template">
+      <h1>Logged in as {{display_name}}</h1>
+      <div class="media">
+        <div class="pull-left">
+          <img class="media-object" width="150" src="{{images.0.url}}" />
+        </div>
+        <div class="media-body">
+          <dl class="dl-horizontal">
+            <dt>Display name</dt><dd class="clearfix">{{display_name}}</dd>
+            <dt>Id</dt><dd>{{id}}</dd>
+            <dt>Email</dt><dd>{{email}}</dd>
+            <dt>Spotify URI</dt><dd><a href="{{external_urls.spotify}}">{{external_urls.spotify}}</a></dd>
+            <dt>Link</dt><dd><a href="{{href}}">{{href}}</a></dd>
+            <dt>Profile Image</dt><dd class="clearfix"><a href="{{images.0.url}}">{{images.0.url}}</a></dd>
+            <dt>Country</dt><dd>{{country}}</dd>
+          </dl>
+        </div>
+      </div>
+    </script>
+
+    <script id="oauth-template" type="text/x-handlebars-template">
+      <h2>oAuth info</h2>
+      <dl class="dl-horizontal">
+        <dt>Access token</dt><dd class="text-overflow">{{access_token}}</dd>
+        <dt>Refresh token</dt><dd class="text-overflow">{{refresh_token}}></dd>
+      </dl>
+    </script>
+
+    <script src="//cdnjs.cloudflare.com/ajax/libs/handlebars.js/2.0.0-alpha.1/handlebars.min.js"></script>
+    <script src="http://code.jquery.com/jquery-1.10.1.min.js"></script>
+    <script>
+      (function() {
+
+        /**
+         * Obtains parameters from the hash of the URL
+         * @return Object
+         */
+        function getHashParams() {
+          var hashParams = {};
+          var e, r = /([^&;=]+)=?([^&;]*)/g,
+              q = window.location.hash.substring(1);
+          while ( e = r.exec(q)) {
+             hashParams[e[1]] = decodeURIComponent(e[2]);
+          }
+          return hashParams;
+        }
+
+        var userProfileSource = document.getElementById('user-profile-template').innerHTML,
+            userProfileTemplate = Handlebars.compile(userProfileSource),
+            userProfilePlaceholder = document.getElementById('user-profile');
+
+        var oauthSource = document.getElementById('oauth-template').innerHTML,
+            oauthTemplate = Handlebars.compile(oauthSource),
+            oauthPlaceholder = document.getElementById('oauth');
+
+        var params = getHashParams();
+
+        var access_token = params.access_token,
+            refresh_token = params.refresh_token,
+            error = params.error,
+            userID;
+
+        if (error) {
+          alert('There was an error during the authentication');
+        } else {
+          if (access_token) {
+            // render oauth info
+            oauthPlaceholder.innerHTML = oauthTemplate({
+              access_token: access_token,
+              refresh_token: refresh_token
+            });
+
+            $.ajax({
+                url: 'https://api.spotify.com/v1/me',
+                headers: {
+                  'Authorization': 'Bearer ' + access_token
+                },
+                success: function(response) {
+                  userProfilePlaceholder.innerHTML = userProfileTemplate(response);
+                  userID = response.id;
+
+                  $('#login').hide();
+                  $('#loggedin').show();
+                }
+            });
+          } else {
+              // render initial screen
+              $('#login').show();
+              $('#loggedin').hide();
+          }
+
+          document.getElementById('obtain-new-token').addEventListener('click', function() {
+            $.ajax({
+              url: '/refresh_token',
+              data: {
+                'refresh_token': refresh_token
+              }
+            }).done(function(data) {
+              access_token = data.access_token;
+              oauthPlaceholder.innerHTML = oauthTemplate({
+                access_token: access_token,
+                refresh_token: refresh_token
+              });
+            });
+          }, false);
+        }      
+
+        
+        //create playlist
+        document.getElementById('create-playlist').addEventListener('click', function() {
+            var create_playlist = document.getElementById('playlist-name').value;
+            var url = "https://api.spotify.com/v1/users/"+userID+"/playlists";
+            console.log(access_token);
+            $.ajax(url, {
+              method: "POST",
+              data: JSON.stringify({
+                "name": create_playlist,
+                "public": false
+              }),
+              dataType: "json",
+              headers: {
+                "Authorization": "Bearer " + access_token,
+                "Content-Type": "application/json"
+              },
+              success: function(data) {
+              //console.log("create playlist response: ", data);
+              console.log(data.id);
+              }
+            });
+          }, false);
+
+        //build artist id list
+        var artistIds = new Array();
+        var buildList = function(id){
+          var aIndex = artistIds.length;
+          artistIds[aIndex] = id;
+        }
+
+         //build track id list
+        var trackIds = new Array();
+        var buildTrackList = function(id){
+          var tIndex = trackIds.length;
+          trackIds[tIndex] = id;
+        }
+
+        //event handler for text field submit button
+        $('#get-artist-id').on('click', function(){
+          var getFieldData = document.getElementById('artist-entry').value;
+          if(getFieldData.length != ""){
+            searchArtist(getFieldData);
+          } else {
+            alert("Please enter an artist.");
+          }
+
+        })
+
+        var searchArtist = function(query){
+          var artistNames = [];
+            if(query.indexOf(",") > -1){
+              artistNames = query.split(",");
+              artistNames = artistNames.map(Function.prototype.call, String.prototype.trim);
+              artistNames = artistNames.map(function(el){
+                return encodeURIComponent(el);
+              });
+            } else {
+              artistNames = encodeURIComponent(query);
+            }
+            //map only works if it is an Array. Need error handling for this.
+            var testArray = artistNames.map(function(q){
+              var artistUrl = "https:/api.spotify.com/v1/search?q="+q+"&type=artist";
+              console.log(artistUrl);
+              $.ajax(artistUrl, {
+                method: "GET",
+                dataType: "json",
+                headers: {
+                  "Authorization": "Bearer " + access_token,
+                  "Content-Type": "application/json"
+                },
+                success: function(data) {    
+                    console.log("got artist", data);
+                    handleArtistData(data);
+
+                }
+              });
+            });
+          };
+
+
+        // var handleArtistData = searchArtist();
+        //handleArtistData.done(function(r){
+        var handleArtistData = function(r){
+            artists: r.artists.items
+                .map(function(item){
+                  var ret = {
+                    name: item.name,
+                    uri: item.uri
+                  };
+                  if(item.name.length > 0){
+                    console.log(item.name);
+                    ret.artist = item.name[0];
+                    ret.artist_uri = item.uri[0];
+                  } 
+                  console.log("here is ret: ", ret);
+                });
+        };
+
+        // var timer = $.Deferred();
+        // var ajax = searchArtist().done();
+        // $.when(timer, ajax).done(function(r){
+        //   artists: r.artists.items
+        //         .map(function(item){
+        //           var ret = {
+        //             name: item.name,
+        //             uri: item.uri
+        //           };
+        //           if(item.name.length > 0){
+        //             ret.artist = item.artists[0].name;
+        //             ret.artist_uri = item.artists[0].uri;
+        //           } 
+        //           console.log(ret);
+        //         });
+        // })
+
+
+        // //get tracks from entered artists
+        // var getTopTracks = function(param){
+        //   console.log("count of artist array " + param.length, param);
+        //   //var listOfTracks = new Array();
+
+        //   //for loop to retrieve top songs for each artist, potentially add as variable later to specify by user
+        //   for(var i = 0; i < param.length; i++){
+        //     var trackUrl = "https://api.spotify.com/v1/artists/"+param[i]+"/top-tracks?country=US&limit=2";
+        //     var currentUri = param[i];
+        //   }
+
+        //   $.ajax(trackUrl, {
+        //       method: "GET",
+        //       dataType: "json",
+        //       headers: {
+        //         "Authorization": "Bearer " + access_token,
+        //         "Content-Type": "application/json"
+        //       },
+        //       success: function(data) {
+        //         for(var i = 0; i < 1; i++){
+        //           var id = "spotify:track:"+encodeURIComponent(data["tracks"][i]["id"]); 
+        //           buildTrackList(id);
+        //         }
+        //       },
+        //       error: function(r){
+        //         console.log(r, "error retrieving top track for: " + currentUri);
+        //       },
+        //       complete: function(data){
+        //         //updateList(trackIds);
+        //         //trackIds = [];
+        //       }
+        //     });           
+
+        // }
+
+        // //add tracks to playlist
+        // var updateList = function(param){
+        //     param = param.join(',');
+        //     //console.log(param);
+        //     var updatePlaylistUrl = "https://api.spotify.com/v1/users/"+userID+"/playlists/4YlZw6OraMbfD2dKjsbtok/tracks?uris="+param;
+        //     $.ajax(updatePlaylistUrl, {
+        //       method: "POST",
+        //       dataType: "text", //trying text instead of json
+        //       headers: {
+        //         "Authorization": "Bearer " + access_token,
+        //         "Content-Type": "application/json"
+        //       },
+        //       success: function(data) {
+        //         console.log("update playlist response: ", data);
+        //       }
+        //     });
+        // }
+
+  
+      })();
+    </script>
+</html>
+
