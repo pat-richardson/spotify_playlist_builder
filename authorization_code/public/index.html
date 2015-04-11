@@ -175,7 +175,6 @@
         var buildList = function(id){
           var aIndex = artistIds.length;
           artistIds[aIndex] = id;
-		  console.log(artistIds);
         }
 
          //build track id list
@@ -183,6 +182,7 @@
         var buildTrackList = function(id){
           var tIndex = trackIds.length;
           trackIds[tIndex] = id;
+          console.log(trackIds);
         }
 
         //event handler for text field submit button
@@ -230,92 +230,75 @@
 
         // var handleArtistData = searchArtist();
         //handleArtistData.done(function(r){
-        var handleArtistData = function(r){
+        var handleArtistData = function(r, q){
+          var artistCheck = decodeURIComponent(q).toLowerCase();
             artists: r.artists.items
                 .map(function(item){
                   var ret = {
                     name: item.name,
                     uri: item.uri
                   };
-                  if(item.uri.length > 0){
+                  if(item.uri.length > 0  && artistCheck == item.name.toLowerCase()){
                     //ret.artist = item.name;
                     var id = item.uri.replace('spotify:artist:', '');
-					buildList(id);
+					          buildList(id);
                   } 
-                  console.log(item.name, id);
                 });
+            getTopTracks(artistIds);
         };
 
-        // var timer = $.Deferred();
-        // var ajax = searchArtist().done();
-        // $.when(timer, ajax).done(function(r){
-        //   artists: r.artists.items
-        //         .map(function(item){
-        //           var ret = {
-        //             name: item.name,
-        //             uri: item.uri
-        //           };
-        //           if(item.name.length > 0){
-        //             ret.artist = item.artists[0].name;
-        //             ret.artist_uri = item.artists[0].uri;
-        //           } 
-        //           console.log(ret);
-        //         });
-        // })
+        //get tracks from entered artists
+        var getTopTracks = function(param){
+          console.log("count of artist array " + param.length, param);
+          //var listOfTracks = new Array();
 
+          //for loop to retrieve top songs for each artist, potentially add as variable later to specify by user
+          for(var i = 0; i < param.length; i++){
+            var trackUrl = "https://api.spotify.com/v1/artists/"+param[i]+"/top-tracks?country=US&limit=2";
+            var currentUri = param[i];
+          }
 
-        // //get tracks from entered artists
-        // var getTopTracks = function(param){
-        //   console.log("count of artist array " + param.length, param);
-        //   //var listOfTracks = new Array();
+          $.ajax(trackUrl, {
+              method: "GET",
+              dataType: "json",
+              headers: {
+                "Authorization": "Bearer " + access_token,
+                "Content-Type": "application/json"
+              },
+              success: function(data) {
+                for(var i = 0; i < 1; i++){
+                  var id = "spotify:track:"+encodeURIComponent(data["tracks"][i]["id"]); 
+                  buildTrackList(id);
+                }
+              },
+              error: function(r){
+                console.log(r, "error retrieving top track for: " + currentUri);
+              },
+              complete: function(data){
+                updateList(trackIds);
+                //trackIds = [];
+              }
+            });           
 
-        //   //for loop to retrieve top songs for each artist, potentially add as variable later to specify by user
-        //   for(var i = 0; i < param.length; i++){
-        //     var trackUrl = "https://api.spotify.com/v1/artists/"+param[i]+"/top-tracks?country=US&limit=2";
-        //     var currentUri = param[i];
-        //   }
+        }
 
-        //   $.ajax(trackUrl, {
-        //       method: "GET",
-        //       dataType: "json",
-        //       headers: {
-        //         "Authorization": "Bearer " + access_token,
-        //         "Content-Type": "application/json"
-        //       },
-        //       success: function(data) {
-        //         for(var i = 0; i < 1; i++){
-        //           var id = "spotify:track:"+encodeURIComponent(data["tracks"][i]["id"]); 
-        //           buildTrackList(id);
-        //         }
-        //       },
-        //       error: function(r){
-        //         console.log(r, "error retrieving top track for: " + currentUri);
-        //       },
-        //       complete: function(data){
-        //         //updateList(trackIds);
-        //         //trackIds = [];
-        //       }
-        //     });           
-
-        // }
-
-        // //add tracks to playlist
-        // var updateList = function(param){
-        //     param = param.join(',');
-        //     //console.log(param);
-        //     var updatePlaylistUrl = "https://api.spotify.com/v1/users/"+userID+"/playlists/4YlZw6OraMbfD2dKjsbtok/tracks?uris="+param;
-        //     $.ajax(updatePlaylistUrl, {
-        //       method: "POST",
-        //       dataType: "text", //trying text instead of json
-        //       headers: {
-        //         "Authorization": "Bearer " + access_token,
-        //         "Content-Type": "application/json"
-        //       },
-        //       success: function(data) {
-        //         console.log("update playlist response: ", data);
-        //       }
-        //     });
-        // }
+        //add tracks to playlist
+        var updateList = function(param){
+            param = param.join(',');
+            //console.log(param);
+            var updatePlaylistUrl = "https://api.spotify.com/v1/users/"+userID+"/playlists/4YlZw6OraMbfD2dKjsbtok/tracks?uris="+param;
+            $.ajax(updatePlaylistUrl, {
+              method: "POST",
+              dataType: "text", //trying text instead of json
+              headers: {
+                "Authorization": "Bearer " + access_token,
+                "Content-Type": "application/json"
+              },
+              success: function(data) {
+                console.log("update playlist response: ", data);
+              }
+            });
+        }
 
   
       })();
