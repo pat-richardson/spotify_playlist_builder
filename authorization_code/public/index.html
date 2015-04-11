@@ -149,7 +149,8 @@
         //create playlist
         document.getElementById('create-playlist').addEventListener('click', function() {
             var create_playlist = document.getElementById('playlist-name').value;
-            var url = "https://api.spotify.com/v1/users/"+userID+"/playlists";
+            var url = "https://api.spotify.com/v1/users/" + userID + "/playlists";
+			
             console.log(access_token);
             $.ajax(url, {
               method: "POST",
@@ -174,6 +175,7 @@
         var buildList = function(id){
           var aIndex = artistIds.length;
           artistIds[aIndex] = id;
+		  console.log(artistIds);
         }
 
          //build track id list
@@ -203,7 +205,7 @@
                 return encodeURIComponent(el);
               });
             } else {
-              artistNames = encodeURIComponent(query);
+              artistNames[0] = encodeURIComponent(query);
             }
             //map only works if it is an Array. Need error handling for this.
             var testArray = artistNames.map(function(q){
@@ -217,8 +219,8 @@
                   "Content-Type": "application/json"
                 },
                 success: function(data) {    
-                    console.log("got artist", data);
-                    handleArtistData(data);
+                    console.log("got artist", q);
+                    handleArtistData(data, q);
 
                 }
               });
@@ -235,12 +237,12 @@
                     name: item.name,
                     uri: item.uri
                   };
-                  if(item.name.length > 0){
-                    console.log(item.name);
-                    ret.artist = item.name[0];
-                    ret.artist_uri = item.uri[0];
+                  if(item.uri.length > 0){
+                    //ret.artist = item.name;
+                    var id = item.uri.replace('spotify:artist:', '');
+					buildList(id);
                   } 
-                  console.log("here is ret: ", ret);
+                  console.log(item.name, id);
                 });
         };
 
