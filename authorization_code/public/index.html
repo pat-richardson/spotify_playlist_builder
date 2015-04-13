@@ -13,6 +13,9 @@
         white-space: nowrap;
         width: 500px;
       }
+      #playlist-name{
+        display:none;
+      }
     </style>
   </head>
 
@@ -28,6 +31,7 @@
         <div id="playlist-form">
             <h3>Add artist names to create a playlist with their top tracks</h3>
             <input type="text" id="playlist-name" placeholder="Title of Playlist to Create" style="width:250px">
+            <button class="btn btn-default" id="retrieve-playlist">Retrieve Existing Playlists</button><br>
             <button class="btn btn-default" id="create-playlist">Create Playlist</button><br>
             <textarea id="artist-entry"rows="6" cols="50" placeholder="Enter a comma separated list to add artists to your playlist"></textarea><br>
             <button class="btn btn-default" id="get-artist-id">Add Artists</button>
@@ -66,6 +70,15 @@
       </dl>
     </script>
 
+    <script id="current-playlists-template" type="text/x-handleb  ars-template">
+      <select id="current-playlists">
+          {{#each ret}}
+          <option selected="selected">Current Spotify Playlists</option>
+          <option id={{item.id}}>{{item.name}}</option>
+          {{/each}}
+        </select>
+    </script>
+
     <script src="//cdnjs.cloudflare.com/ajax/libs/handlebars.js/2.0.0-alpha.1/handlebars.min.js"></script>
     <script src="http://code.jquery.com/jquery-1.10.1.min.js"></script>
     <script>
@@ -92,6 +105,10 @@
         var oauthSource = document.getElementById('oauth-template').innerHTML,
             oauthTemplate = Handlebars.compile(oauthSource),
             oauthPlaceholder = document.getElementById('oauth');
+
+        var dropdownSource = document.getElementById('current-playlists-template').innerHTML,
+            dropdownTemplate = Handlebars.compile(dropdownSource),
+            dropdownPlaceholder = document.getElementById('current-playlists');
 
         var params = getHashParams();
 
@@ -143,9 +160,64 @@
               });
             });
           }, false);
+
         }      
 
-        
+        //retrieve users current playlist
+        var getCurrentPlaylists = function(){
+            var url = "https://api.spotify.com/v1/users/" + userID + "/playlists";
+            $.ajax(url, {
+              method: "GET",
+              dataType: "json",
+              headers: {
+                "Authorization": "Bearer " + access_token,
+                "Content-Type": "application/json"
+              },
+              success: function(data){
+                populateDropdown(data);
+              }
+            })
+        }
+
+        //populate playlist dropdown
+        var populateDropdown = function(r){
+            playlists: r.items
+                .map(function(item){
+                  var pd = {
+                    name: item.name,
+                    id: item.id
+                  };
+                  /*Add error handling to output to screen any artists that weren't found*/
+                  if(item.name == "Starred"){
+                    var playlistName = item.name;
+                    var playlistId = item.id;
+                  } 
+                //dropdownPlaceholder.innerHTML = dropdownTemplate(pd);
+                if(playlistName != undefined){
+                    console.log(playlistName, playlistId);
+                    delete pd.playlistName;
+                    delete pd.playlistId;
+                    console.log(pd);
+                }
+                // console.log(pd);
+            });
+
+        }
+
+        // document.getElementById('current-playlists').addEventListener('click', function(){
+        //     getCurrentPlaylists();
+        // }, false);
+
+        document.getElementById('retrieve-playlist').addEventListener('click', function(){
+            getCurrentPlaylists();
+        }, false);
+
+        document.getElementById('create-playlist').addEventListener('click', function(){
+            document.getElementById('playlist-name').style.display="block";
+        }, false);
+
+
+
         //create playlist
         document.getElementById('create-playlist').addEventListener('click', function() {
             var create_playlist = document.getElementById('playlist-name').value;
@@ -182,7 +254,7 @@
         var buildTrackList = function(id){
           var tIndex = trackIds.length;
           trackIds[tIndex] = id;
-          console.log(trackIds);
+          //console.log(trackIds);
         }
 
         //event handler for text field submit button
@@ -207,10 +279,9 @@
             } else {
               artistNames[0] = encodeURIComponent(query);
             }
-            //map only works if it is an Array. Need error handling for this.
             var testArray = artistNames.map(function(q){
               var artistUrl = "https:/api.spotify.com/v1/search?q="+q+"&type=artist";
-              console.log(artistUrl);
+              //console.log(artistUrl);
               $.ajax(artistUrl, {
                 method: "GET",
                 dataType: "json",
@@ -219,7 +290,6 @@
                   "Content-Type": "application/json"
                 },
                 success: function(data) {    
-                    console.log("got artist", q);
                     handleArtistData(data, q);
 
                 }
@@ -238,6 +308,7 @@
                     name: item.name,
                     uri: item.uri
                   };
+                  /*Add error handling to output to screen any artists that weren't found*/
                   if(item.uri.length > 0  && artistCheck == item.name.toLowerCase()){
                     //ret.artist = item.name;
                     var id = item.uri.replace('spotify:artist:', '');
@@ -249,12 +320,10 @@
 
         //get tracks from entered artists
         var getTopTracks = function(param){
-          console.log("count of artist array " + param.length, param);
-          //var listOfTracks = new Array();
 
           //for loop to retrieve top songs for each artist, potentially add as variable later to specify by user
           for(var i = 0; i < param.length; i++){
-            var trackUrl = "https://api.spotify.com/v1/artists/"+param[i]+"/top-tracks?country=US&limit=2";
+            var trackUrl = "https://api.spotify.com/v1/artists/" + param[i] + "/top-tracks?country=US&limit=2";
             var currentUri = param[i];
           }
 
@@ -266,27 +335,40 @@
                 "Content-Type": "application/json"
               },
               success: function(data) {
-                for(var i = 0; i < 1; i++){
-                  var id = "spotify:track:"+encodeURIComponent(data["tracks"][i]["id"]); 
-                  buildTrackList(id);
-                }
+                  handleTrackData(data);
               },
+              /*Add error handling to output to screen any artists that didn't return top tracks*/
               error: function(r){
                 console.log(r, "error retrieving top track for: " + currentUri);
-              },
-              complete: function(data){
-                updateList(trackIds);
-                //trackIds = [];
               }
+              // complete: function(data){
+              //   updateList(trackIds);
+              //   console.log("trackids: ", trackIds);
+              //   trackIds = [];
+              // }
             });           
 
         }
 
-        //add tracks to playlist
+        var handleTrackData = function(r){
+            //counter indicates how many top tracks to grab for each artist
+            var numOfTracks = 1;
+            for(var i = 0; i < numOfTracks; i++){
+              var id = encodeURIComponent("spotify:track:" + r["tracks"][i]["id"]); 
+              buildTrackList(id);
+            }
+            updateList(trackIds);
+        }
+
+        //add tracks to playlists
         var updateList = function(param){
-            param = param.join(',');
-            //console.log(param);
-            var updatePlaylistUrl = "https://api.spotify.com/v1/users/"+userID+"/playlists/4YlZw6OraMbfD2dKjsbtok/tracks?uris="+param;
+            /*API only allows 100 tracks be added per request.  Add logic to account for arrays with more than 100 tracks*/
+            //param = param.join(',');
+            var uris = {
+              "uris": param
+            }
+            console.log(uris);
+            var updatePlaylistUrl = "https://api.spotify.com/v1/users/"+userID+"/playlists/4YlZw6OraMbfD2dKjsbtok/tracks?"
             $.ajax(updatePlaylistUrl, {
               method: "POST",
               dataType: "text", //trying text instead of json
@@ -294,6 +376,8 @@
                 "Authorization": "Bearer " + access_token,
                 "Content-Type": "application/json"
               },
+              data: uris,
+              /*Need to print to screen success messages*/
               success: function(data) {
                 console.log("update playlist response: ", data);
               }
